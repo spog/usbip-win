@@ -17,7 +17,7 @@ get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_stat
 
 	RtlZeroMemory(ports_status, sizeof(ioctl_usbip_vhci_get_ports_status));
 
-	WdfWaitLockAcquire(vhci->lock, NULL);
+	WdfSpinLockAcquire(vhci->spin_lock);
 
 	for (i = 0; i != vhci->n_max_ports; i++) {
 		pctx_vusb_t	vusb = vhci->vusbs[i];
@@ -27,7 +27,7 @@ get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_stat
 		}
 	}
 
-	WdfWaitLockRelease(vhci->lock);
+	WdfSpinLockRelease(vhci->spin_lock);
 
 	TRD(IOCTL, "Leave\n");
 }

@@ -9,21 +9,33 @@ ep_start(_In_ UDECXUSBENDPOINT ude_ep)
 {
 	pctx_ep_t	ep = TO_EP(ude_ep);
 
-	TRD(VUSB, "Enter: %d", ep->addr);
+	TRD(VUSB, "Enter: ep->addr=0x%x", ep->addr);
 	WdfIoQueueStart(ep->queue);
 	TRD(VUSB, "Leave");
 }
+
+static EVT_WDF_IO_QUEUE_STATE queuePurgeComplete;
 
 static VOID
 ep_purge(_In_ UDECXUSBENDPOINT ude_ep)
 {
 	pctx_ep_t	ep = TO_EP(ude_ep);
 
-	TRD(VUSB, "Enter: %d", ep->addr);
+	TRD(VUSB, "Enter: ep->addr=0x%x", ep->addr);
 
-	WdfIoQueuePurgeSynchronously(ep->queue);
+	WdfIoQueuePurge(ep->queue, queuePurgeComplete, (WDFCONTEXT)ude_ep);
+
+	TRD(VUSB, "Leave");
+}
+
+static VOID
+queuePurgeComplete(WDFQUEUE Queue, WDFCONTEXT Context)
+{
+	UNREFERENCED_PARAMETER(Queue);
+	UDECXUSBENDPOINT ude_ep = (UDECXUSBENDPOINT)Context;
+
+	TRD(VUSB, "Enter");
 	UdecxUsbEndpointPurgeComplete(ude_ep);
-
 	TRD(VUSB, "Leave");
 }
 
@@ -63,6 +75,7 @@ add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPT
 	NTSTATUS	status;
 
 	ep_addr = dscr_ep ? dscr_ep->bEndpointAddress : USB_DEFAULT_DEVICE_ADDRESS;
+	TRD(VUSB, "Enter: ep_addr=0x%x", ep_addr);
 	UdecxUsbEndpointInitSetEndpointAddress(*pepinit, ep_addr);
 
 	UDECX_USB_ENDPOINT_CALLBACKS_INIT(&callbacks, ep_reset);
@@ -92,6 +105,7 @@ add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPT
 	queue = create_queue_ep(ep);
 	if (queue == NULL) {
 		WdfObjectDelete(ude_ep);
+		TRE(VUSB, "Leave: STATUS_UNSUCCESSFUL");
 		return STATUS_UNSUCCESSFUL;
 	}
 	UdecxUsbEndpointSetWdfIoQueue(ude_ep, queue);
@@ -100,6 +114,7 @@ add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPT
 	if (dscr_ep == NULL) {
 		vusb->ep_default = ep;
 	}
+	TRD(VUSB, "Leave");
 	return STATUS_SUCCESS;
 }
 
@@ -124,7 +139,8 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	pctx_vusb_t	vusb = TO_VUSB(udev);
 	NTSTATUS	status;
 
-	TRD(VUSB, "Enter: epaddr: 0x%x, interval: 0x%x", (ULONG)epcreate->EndpointDescriptor->bEndpointAddress,
+	TRD(VUSB, "Enter: >bEndpointAddress=0x%x, bInterval: 0x%x",
+		epcreate->EndpointDescriptor->bEndpointAddress,
 		(ULONG)epcreate->EndpointDescriptor->bInterval);
 
 	status = add_ep(vusb, &epcreate->UdecxUsbEndpointInit, epcreate->EndpointDescriptor);
@@ -134,22 +150,33 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	return status;
 }
 
-static VOID
+static NTSTATUS
 release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
+	TRD(VUSB, "Enter: %!epconf!", params->ReleasedEndpointsCount);
+
 	for (ULONG i = 0; i < params->ReleasedEndpointsCount; i++) {
 		pctx_ep_t	ep = TO_EP(params->ReleasedEndpoints[i]);
 		WdfIoQueuePurgeSynchronously(ep->queue);
+		TRD(VUSB, "Released ep->addr=0x%x!", ep->addr);
 	}
+	return STATUS_SUCCESS;
 }
 
 static VOID
 ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
 	pctx_vusb_t	vusb = TO_VUSB(udev);
-	NTSTATUS	status = STATUS_SUCCESS;
+	NTSTATUS	status = STATUS_UNSUCCESSFUL;
 
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
+
+	status = release_ep(params);
+	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE)) {
+		WdfRequestComplete(req, status);
+		TRD(VUSB, "Leave: %!STATUS!", status);
+		return;
+	}
 
 	switch (params->ConfigureType) {
 	case UdecxEndpointsConfigureTypeDeviceInitialize:
@@ -164,9 +191,6 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		break;
 	case UdecxEndpointsConfigureTypeInterfaceSettingChange:
 		status = submit_req_select(vusb->ep_default, req, 0, 0, params->InterfaceNumber, params->NewInterfaceSetting);
-		break;
-	case UdecxEndpointsConfigureTypeEndpointsReleasedOnly:
-		release_ep(params);
 		break;
 	default:
 		TRE(VUSB, "unhandled configure type: %!epconf!", params->ConfigureType);
