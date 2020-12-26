@@ -150,8 +150,33 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	return status;
 }
 
+
+#if 0 /*spog - added*/
 static NTSTATUS
-release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
+configure_eps(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
+{
+	pctx_ep_t ep;
+	WDFQUEUE queue;
+	TRD(VUSB, "Enter: EndpointsToConfigureCount=%d", params->EndpointsToConfigureCount);
+
+	for (ULONG i = 0; i < params->EndpointsToConfigureCount; i++) {
+		ep = TO_EP(params->EndpointsToConfigure[i]);
+		queue = create_queue_ep(ep);
+		if (queue == NULL) {
+			TRE(VUSB, "Leave: STATUS_UNSUCCESSFUL");
+			return STATUS_UNSUCCESSFUL;
+		}
+		UdecxUsbEndpointSetWdfIoQueue(params->EndpointsToConfigure[i], queue);
+
+		ep->queue = queue;
+		TRD(VUSB, "Configured ep->addr=0x%x!", ep->addr);
+	}
+	return STATUS_SUCCESS;
+}
+#endif
+
+static NTSTATUS
+release_eps(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
 	TRD(VUSB, "Enter: ReleasedEndpointsCount=%d", params->ReleasedEndpointsCount);
 
@@ -170,8 +195,23 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 	NTSTATUS	status = STATUS_UNSUCCESSFUL;
 
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
+#if 1 /*spog - added*/
+	TRD(VUSB, "The 'params' values:");
+	TRD(VUSB, "params->Size: %lu", params->Size);
+	TRD(VUSB, "params->ConfigureType: %lu", params->ConfigureType);
+	TRD(VUSB, "params->NewConfigurationValue: %u", params->NewConfigurationValue);
+	TRD(VUSB, "params->InterfaceNumber: %u", params->InterfaceNumber);
+	TRD(VUSB, "params->NewInterfaceSetting: %hu", params->NewInterfaceSetting);
+	TRD(VUSB, "params->EndpointsToConfigureCount: %lu", params->EndpointsToConfigureCount);
+	TRD(VUSB, "params->EndpointsToConfigure: 0x%p", params->EndpointsToConfigure);
+	TRD(VUSB, "params->ReleasedEndPointsCount: %lu", params->ReleasedEndpointsCount);
+	TRD(VUSB, "params->ReleasedEndPoints: 0x%p", params->ReleasedEndpoints);
+#endif
 
-	status = release_ep(params);
+#if 1 /*spog - added*/
+	status = configure_eps(params);
+#endif
+	status = release_eps(params);
 	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE)) {
 		WdfRequestComplete(req, status);
 		TRD(VUSB, "Leave: %!STATUS!", status);
