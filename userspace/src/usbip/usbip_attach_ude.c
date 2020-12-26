@@ -79,6 +79,9 @@ build_pluginfo(SOCKET sockfd, unsigned devid)
 		return NULL;
 	}
 
+#if 1 /*spog - added*/
+	dbg("conf_dscr_len=%lu", conf_dscr_len);
+#endif
 	pluginfo_size = sizeof(vhci_pluginfo_t) + conf_dscr_len - 9;
 	pluginfo = (pvhci_pluginfo_t)malloc(pluginfo_size);
 	if (pluginfo == NULL) {
@@ -90,11 +93,32 @@ build_pluginfo(SOCKET sockfd, unsigned devid)
 		free(pluginfo);
 		return NULL;
 	}
+#if 1 /*spog - added*/
+	{
+		int i;
+		printf("Device descriptor (dev_dscr_len=18):\n");
+		for (i = 0; i < 18; i++) {
+			printf("%.2x ", pluginfo->dscr_dev[i]);
+		}
+		printf("\n");
+	}
+#endif
 	if (fetch_conf_descriptor(sockfd, devid, pluginfo->dscr_conf, &conf_dscr_len) < 0) {
 		err("failed to fetch configuration descriptor");
 		free(pluginfo);
 		return NULL;
 	}
+#if 1 /*spog - added*/
+	{
+		int i;
+		printf("Configuration descriptor (conf_dscr_len=%lu):", conf_dscr_len);
+		for (i = 0; i < conf_dscr_len; i++) {
+			if ((i % 16) == 0) printf("\n");
+			printf("%.2x ", pluginfo->dscr_conf[i]);
+		}
+		printf("\n");
+	}
+#endif
 
 	pluginfo->size = pluginfo_size;
 	pluginfo->devid = devid;
