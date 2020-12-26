@@ -96,7 +96,7 @@ store_urbr_urb(WDFREQUEST req_read, purb_req_t urbr)
 	NTSTATUS	status;
 
 	urb_func = urbr->u.urb->UrbHeader.Function;
-	TRD(READ, "%!URBR!", urbr);
+	TRD(READ, "%!URBR! (%s)", urbr, urbr_more_info(urbr));
 
 	switch (urb_func) {
 	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
