@@ -167,6 +167,8 @@ release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 	for (ULONG i = 0; i < params->ReleasedEndpointsCount; i++) {
 		pctx_ep_t	ep = TO_EP(params->ReleasedEndpoints[i]);
 		WdfIoQueuePurgeSynchronously(ep->queue);
+		if (ep == ep->vusb->ep_default)
+			ep->vusb->ep_default = NULL;
 		TRD(VUSB, "Released ep->addr=0x%x!", ep->addr);
 	}
 }
@@ -216,7 +218,7 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
 
 	release_ep(params);
-	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE)) {
+	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE) || (vusb->ep_default == NULL)) {
 		WdfRequestComplete(req, status);
 		TRD(VUSB, "Leave: %!STATUS!", status);
 		return;
@@ -227,14 +229,23 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		/* FIXME: UDE framework seems to not call SET CONFIGURATION if a USB has multiple interfaces.
 		 * This enforces the device to be set with the first configuration.
 		 */
-		status = submit_req_select(vusb->ep_default, req, 1, vusb->default_conf_value, 0, 0);
-		TRD(VUSB, "trying to SET CONFIGURATION: %u", (ULONG)vusb->default_conf_value);
+		if (vusb->ep_default != NULL) {
+			status = submit_req_select(vusb->ep_default, req, 1, vusb->default_conf_value, 0, 0);
+			TRD(VUSB, "trying to SET CONFIGURATION: %u", (ULONG)vusb->default_conf_value);
+		} else
+			status = STATUS_UNSUCCESSFUL;
 		break;
 	case UdecxEndpointsConfigureTypeDeviceConfigurationChange:
-		status = submit_req_select(vusb->ep_default, req, 1, params->NewConfigurationValue, 0, 0);
+		if (vusb->ep_default != NULL)
+			status = submit_req_select(vusb->ep_default, req, 1, params->NewConfigurationValue, 0, 0);
+		else
+			status = STATUS_UNSUCCESSFUL;
 		break;
 	case UdecxEndpointsConfigureTypeInterfaceSettingChange:
-		status = set_intf_for_ep(vusb, req, params);
+		if (vusb->ep_default != NULL)
+			status = set_intf_for_ep(vusb, req, params);
+		else
+			status = STATUS_UNSUCCESSFUL;
 		break;
 	default:
 		TRE(VUSB, "unhandled configure type: %!epconf!", params->ConfigureType);
