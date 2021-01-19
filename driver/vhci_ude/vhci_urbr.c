@@ -96,7 +96,24 @@ get_urb_from_req(WDFREQUEST req)
 	WDF_REQUEST_PARAMETERS_INIT(&params);
 	WdfRequestGetParameters(req, &params);
 	if (params.Parameters.DeviceIoControl.IoControlCode == IOCTL_INTERNAL_USB_SUBMIT_URB)
+#if 1 /*spog - orig*/
 		return (PURB)params.Parameters.Others.Arg1;
+#else
+	{
+		NTSTATUS status = STATUS_SUCCESS;
+		PUCHAR transferBuffer;
+		ULONG transferBufferLength = 0;
+		status = UdecxUrbRetrieveBuffer(req, &transferBuffer, &transferBufferLength);
+		if (!NT_ERROR(status))
+		{
+			TRD(URBR, "transferBuffer:%p, transferBufferLength=%d", transferBuffer, transferBufferLength);
+		}
+
+		TRD(URBR, "Arg1:%p", (PURB)params.Parameters.Others.Arg1);
+		return (PURB)params.Parameters.Others.Arg1;
+//		return (PURB)transferBuffer;
+	}
+#endif
 	return NULL;
 }
 
@@ -126,6 +143,10 @@ create_urbr(pctx_ep_t ep, urbr_type_t type, WDFREQUEST req)
 	if (req != NULL) {
 		urbr->u.urb = get_urb_from_req(req);
 		WdfRequestSetInformation(req, (ULONG_PTR)urbr);
+#if 1 /*spog - added*/
+		if (urbr->u.urb != NULL)
+			TRD(URBR, "&UrbHeader:%p, UrbHeader.Length=%d", &urbr->u.urb->UrbHeader, urbr->u.urb->UrbHeader.Length);
+#endif
 	}
 
 	InitializeListHead(&urbr->list_all);
@@ -166,6 +187,10 @@ urbr_cancelled(_In_ WDFREQUEST req)
 	purb_req_t	urbr = (purb_req_t)WdfRequestGetInformation(req);
 	pctx_vusb_t	vusb = urbr->ep->vusb;
 
+#if 1 /*spog - added*/
+	if (urbr->u.urb != NULL)
+		TRD(URBR, "&urbr->u.urb->UrbHeader:%p, urbr->u.urb->UrbHeader.Length=%d", &urbr->u.urb->UrbHeader, urbr->u.urb->UrbHeader.Length);
+#endif
 	WdfSpinLockAcquire(vusb->spin_lock);
 	RemoveEntryListInit(&urbr->list_state);
 	RemoveEntryListInit(&urbr->list_all);
@@ -332,6 +357,7 @@ complete_urbr(purb_req_t urbr, NTSTATUS status)
 {
 	WDFREQUEST	req;
 
+	TRD(URBR, "Enter: %!STATUS!, %!URBR!", status, urbr);
 	req = urbr->req;
 	if (req != NULL) {
 		if (urbr->type != URBR_TYPE_URB)
@@ -345,4 +371,5 @@ complete_urbr(purb_req_t urbr, NTSTATUS status)
 		}
 	}
 	free_urbr(urbr);
+	TRD(URBR, "Leave");
 }
