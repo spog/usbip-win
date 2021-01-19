@@ -23,6 +23,9 @@ get_hdr_from_req_write(WDFREQUEST req_write)
 		return NULL;
 	}
 
+#if 1 /*spog - orig*/
+	TRD(WRITE, "usbip_header_size=%u, len: %u", sizeof(struct usbip_header), (ULONG)len);
+#endif
 	WdfRequestSetInformation(req_write, len);
 	return hdr;
 }

@@ -20,7 +20,9 @@ purge_complete(WDFQUEUE queue, WDFCONTEXT ctx)
 {
 	UNREFERENCED_PARAMETER(ctx);
 
+	TRD(VUSB, "Enter:");
 	UdecxUsbEndpointPurgeComplete((*TO_PEP(queue))->ude_ep);
+	TRD(VUSB, "Leave");
 }
 
 static VOID
@@ -218,13 +220,14 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
 
 	release_ep(params);
+	TRD(VUSB, "vusb->invalid = %d, vusb->ep_default = %p", vusb->invalid, vusb->ep_default);
 	if (
 		(params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) ||
 		(vusb->invalid == TRUE) ||
 		(vusb->ep_default == NULL)
 	) {
 		WdfRequestComplete(req, status);
-		TRD(VUSB, "Leave: %!STATUS!", status);
+		TRD(VUSB, "Leave1: %!STATUS!", status);
 		return;
 	}
 
@@ -255,7 +258,7 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 
 	if (status != STATUS_PENDING)
 		WdfRequestComplete(req, status);
-	TRD(VUSB, "Leave: %!STATUS!", status);
+	TRD(VUSB, "Leave2: %!STATUS!", status);
 }
 
 VOID
