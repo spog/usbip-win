@@ -49,6 +49,10 @@ store_urbr_partial(WDFREQUEST req_read, purb_req_t urbr)
 	NTSTATUS	status;
 
 	TRD(READ, "Enter: urbr: %!URBR!", urbr);
+#if 1 /*spog - added*/
+	if (urbr->u.urb != NULL)
+		TRD(URBR, "&UrbHeader:%p, UrbHeader.Length=%d", &urbr->u.urb->UrbHeader, urbr->u.urb->UrbHeader.Length);
+#endif
 
 	WDF_REQUEST_PARAMETERS_INIT(&params);
 	WdfRequestGetParameters(urbr->req, &params);

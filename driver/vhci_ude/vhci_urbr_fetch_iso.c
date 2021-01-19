@@ -10,9 +10,13 @@ save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descripto
 {
 	ULONG	i;
 
+	TRD(WRITE, "urb->NumberOfPackets=%d", urb->NumberOfPackets);
 	for (i = 0; i < urb->NumberOfPackets; i++) {
+		TRD(WRITE, "urb->IsoPacket[%d].Offset=%u, iso_desc: offset=0x%x, length=%u, actual_length=%u", i, urb->IsoPacket[i].Offset, iso_desc->offset, iso_desc->length, iso_desc->actual_length);
 		if (iso_desc->offset > urb->IsoPacket[i].Offset) {
-			TRW(WRITE, "why offset changed?%d %d %d %d", i, iso_desc->offset, iso_desc->actual_length, urb->IsoPacket[i].Offset);
+			TRW(WRITE, "why offset changed?%d 0x%x %u %u %u", i, iso_desc->offset, iso_desc->length, iso_desc->actual_length, urb->IsoPacket[i].Offset);
+			iso_desc++;
+			TRW(WRITE, "why offset changed?%d 0x%x %u %u %u", i, iso_desc->offset, iso_desc->length, iso_desc->actual_length, urb->IsoPacket[i].Offset);
 			return FALSE;
 		}
 		urb->IsoPacket[i].Length = iso_desc->actual_length;
@@ -56,13 +60,21 @@ fetch_urbr_iso(PURB urb, struct usbip_header *hdr)
 	PVOID	buf;
 	int	in_len = 0;
 
+	TRD(WRITE, "sizeof: usbip_header=%d, usbip_is_packet_descriptor=%d", sizeof(struct usbip_header), sizeof(struct usbip_iso_packet_descriptor));
+	TRD(WRITE, "ret_submit: status=%d, actual_length=%d, start_frame=%d", hdr->u.ret_submit.status, hdr->u.ret_submit.actual_length, hdr->u.ret_submit.start_frame);
+	TRD(WRITE, "ret_submit: number_of_packets=%d, error_count=%d", hdr->u.ret_submit.number_of_packets, hdr->u.ret_submit.error_count);
 	if (IS_TRANSFER_FLAGS_IN(urb_iso->TransferFlags))
 		in_len = hdr->u.ret_submit.actual_length;
-	iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + in_len);
+	TRD(WRITE, "urb_iso->TransferFlags = 0x%x, urb_iso->TransferBufferLength = %d, in_len = %d", urb_iso->TransferFlags, urb_iso->TransferBufferLength, in_len);
+	iso_desc = (struct usbip_iso_packet_descriptor*)((char*)(hdr + 1) + in_len);
 	if (!save_iso_desc(urb_iso, iso_desc))
 		return STATUS_INVALID_PARAMETER;
 
 	urb_iso->ErrorCount = hdr->u.ret_submit.error_count;
+#if 1 /*spog - added*/
+	if (!IS_TRANSFER_FLAGS_IN(urb_iso->TransferFlags))
+		return STATUS_SUCCESS;
+#endif
 	buf = get_buf(urb_iso->TransferBuffer, urb_iso->TransferBufferMDL);
 	if (buf == NULL)
 		return STATUS_INVALID_PARAMETER;

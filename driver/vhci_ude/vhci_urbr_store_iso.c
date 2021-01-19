@@ -24,20 +24,31 @@ store_iso_data(PVOID dst, struct _URB_ISOCH_TRANSFER *urb_iso)
 	}
 
 	offset = 0;
+	TRD(READ, "urb_iso->NumberOfPackets=%d", urb_iso->NumberOfPackets);
 	for (i = 0; i < urb_iso->NumberOfPackets; i++) {
 		if (urb_iso->IsoPacket[i].Offset < offset) {
-			TRW(READ, "strange iso packet offset:%d %d", offset, urb_iso->IsoPacket[i].Offset);
+			TRW(READ, "strange iso packet offset:%u %u", offset, urb_iso->IsoPacket[i].Offset);
 			return STATUS_INVALID_PARAMETER;
 		}
 		iso_desc->offset = urb_iso->IsoPacket[i].Offset;
+#if 0 /*spog - orig*/
 		if (i > 0)
 			(iso_desc - 1)->length = urb_iso->IsoPacket[i].Offset - offset;
 		offset = urb_iso->IsoPacket[i].Offset;
+#else
+		if (i < (urb_iso->NumberOfPackets - 1))
+			iso_desc->length = urb_iso->IsoPacket[i + 1].Offset - iso_desc->offset;
+		else
+			iso_desc->length = urb_iso->TransferBufferLength - iso_desc->offset;
+#endif
 		iso_desc->actual_length = 0;
 		iso_desc->status = 0;
+		TRD(READ, "urb_iso->IsoPacket[%d].Offset=%u, iso_desc: offset=%u, length=%u, actual_length=%u", i, urb_iso->IsoPacket[i].Offset, iso_desc->offset, iso_desc->length, iso_desc->actual_length);
 		iso_desc++;
 	}
+#if 0 /*spog - orig*/
 	(iso_desc - 1)->length = urb_iso->TransferBufferLength - offset;
+#endif
 
 	return STATUS_SUCCESS;
 }
@@ -62,6 +73,7 @@ store_urbr_iso_partial(WDFREQUEST req_read, purb_req_t urbr)
 	PVOID	dst;
 
 	len_iso = get_iso_payload_len(urb_iso);
+	TRD(READ, "urb_iso->TransferFlags = 0x%x, urb_iso->TransferBufferLength = %d, len_iso = %d", urb_iso->TransferFlags, urb_iso->TransferBufferLength, len_iso);
 
 	dst = get_data_from_req_read(req_read, len_iso);
 	if (dst == NULL)
@@ -82,6 +94,7 @@ store_urbr_iso(WDFREQUEST req_read, purb_req_t urbr)
 	int	in, type;
 
 	in = IS_TRANSFER_FLAGS_IN(urb_iso->TransferFlags);
+	TRD(READ, "urb_iso->TransferFlags = 0x%x, urb_iso->TransferBufferLength = %d, in = %d", urb_iso->TransferFlags, urb_iso->TransferBufferLength, in);
 	type = urbr->ep->type;
 	if (type != USB_ENDPOINT_TYPE_ISOCHRONOUS) {
 		TRE(READ, "Error, not a iso pipe");

@@ -41,6 +41,7 @@ typedef struct _devbuf {
  */
 static HANDLE	hEvent;
 
+//spog - added: #define DEBUG_PDU
 #ifdef DEBUG_PDU
 #undef USING_STDOUT
 
@@ -98,7 +99,14 @@ dump_iso_pkts(struct usbip_header *hdr)
 		break;
 	case USBIP_RET_SUBMIT:
 		n_pkts = hdr->u.ret_submit.number_of_packets;
+#if 0 /*spog - orig*/
 		iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + hdr->u.ret_submit.actual_length);
+#else
+		if (hdr->base.direction)
+			iso_desc = (struct usbip_iso_packet_descriptor*)((char*)(hdr + 1) + hdr->u.ret_submit.actual_length);
+		else
+			iso_desc = (struct usbip_iso_packet_descriptor*)(hdr + 1);
+#endif
 		break;
 	default:
 		return;
@@ -222,6 +230,7 @@ swap_usbip_header_cmd(unsigned int cmd, struct usbip_header *hdr)
 		break;
 	default:
 		/* NOTREACHED */
+		DBGF("SPOG-DUMP: %s\n", dbg_usbip_hdr_cmd(cmd));
 		err("unknown command in pdu header: %d", cmd);
 		break;
 	}
@@ -310,6 +319,11 @@ get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 			return 0;
 		if (hdr->base.direction)
 			return 0;
+#if 1 /*spog - added*/
+		else if (hdr->base.command == USBIP_RET_SUBMIT) {
+			return 0;
+		}
+#endif
 		if (!record_outq_seqnum(hdr->base.seqnum)) {
 			err("failed to record. out queue full");
 		}
@@ -320,6 +334,12 @@ get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 			return 0;
 		if (is_outq_seqnum(hdr->base.seqnum))
 			return 0;
+#if 1 /*spog - added*/
+		if (!hdr->base.direction)
+			if (hdr->base.command == USBIP_RET_SUBMIT) {
+				return 0;
+			}
+#endif
 		return hdr->u.ret_submit.actual_length;
 	}
 }
@@ -505,6 +525,7 @@ read_dev(devbuf_t *rbuff, BOOL swap_req_write)
 
 	if (BUFREAD_P(rbuff) < sizeof(struct usbip_header)) {
 		rbuff->step_reading = 1;
+		DBGF("SPOG: (step %d (%s) - read_devbuf(len=%d)\n", rbuff->step_reading, rbuff->desc, sizeof(struct usbip_header) - BUFREAD_P(rbuff));
 		if (!read_devbuf(rbuff, sizeof(struct usbip_header) - BUFREAD_P(rbuff)))
 			return -1;
 		return 0;
@@ -524,11 +545,15 @@ read_dev(devbuf_t *rbuff, BOOL swap_req_write)
 	if (BUFREAD_P(rbuff) < len_data + sizeof(struct usbip_header)) {
 		DWORD	nmore = (DWORD)(len_data + sizeof(struct usbip_header)) - BUFREAD_P(rbuff);
 
+		DBGF("SPOG: step %d (%s) - read_devbuf(len=%d)\n", rbuff->step_reading, rbuff->desc, nmore);
 		if (!read_devbuf(rbuff, nmore))
 			return -1;
 		return 0;
 	}
 
+#if 1 /*spog - added*/
+	DBGF("SPOG: xfer_len=%lu, iso_len=%lu\n", xfer_len, iso_len);
+#endif
 	if (rbuff->swap_req && iso_len > 0)
 		swap_iso_descs_endian((char *)(hdr + 1) + xfer_len, hdr->u.ret_submit.number_of_packets);
 

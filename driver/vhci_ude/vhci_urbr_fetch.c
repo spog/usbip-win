@@ -116,6 +116,10 @@ fetch_urbr(purb_req_t urbr, struct usbip_header *hdr)
 	NTSTATUS	status;
 
 	TRD(WRITE, "Enter: %!URBR!", urbr);
+#if 0 /*spog - added*/
+	if (urbr->u.urb != NULL)
+		TRD(URBR, "&UrbHeader:%p, UrbHeader.Length=%d", &urbr->u.urb->UrbHeader, urbr->u.urb->UrbHeader.Length);
+#endif
 
 	if (urbr->type != URBR_TYPE_URB) {
 		status = STATUS_SUCCESS;
@@ -124,6 +128,10 @@ fetch_urbr(purb_req_t urbr, struct usbip_header *hdr)
 		if (hdr->u.ret_submit.status != 0)
 			handle_urbr_error(urbr, hdr);
 
+#if 1 /*spog - added*/
+		if (urbr->u.urb != NULL)
+			TRD(URBR, "&UrbHeader:%p, UrbHeader.Length=%d", &urbr->u.urb->UrbHeader, urbr->u.urb->UrbHeader.Length);
+#endif
 		status = fetch_urbr_urb(urbr->u.urb, hdr);
 	}
 
